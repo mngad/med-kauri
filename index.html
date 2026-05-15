@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>med</title>
+    <link rel="stylesheet" href="./src/styles/app.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="toolbar" style="display: none">
+        <button id="btn-bold" title="Bold (Cmd+B)">B</button>
+        <button id="btn-italic" title="Italic (Cmd+I)"><i>I</i></button>
+        <button id="btn-heading" title="Heading">H</button>
+        <button id="btn-list" title="Unordered List">≡</button>
+        <button id="btn-link" title="Link">⛓</button>
+        <button id="btn-code" title="Code">&lt;/&gt;</button>
+      </div>
+      <div id="main-content">
+        <div id="editor-pane">
+          <div id="editor"></div>
+        </div>
+        <div id="divider"></div>
+        <div id="preview-pane">
+          <div id="preview" class="markdown-body"></div>
+        </div>
+      </div>
+      <div id="statusbar" style="display: none">
+        <span id="status-words">0 words</span>
+        <span id="status-chars">0 chars</span>
+      </div>
+    </div>
+    <script type="module" src="./src/js/main.ts"></script>
+  </body>
+</html>
