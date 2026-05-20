@@ -20,6 +20,7 @@ export function initEditor(parent: HTMLElement) {
     extensions: [
       basicSetup,
       markdown(),
+      EditorView.lineWrapping,
       themeCompartment.of(darkMode ? oneDark : []),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && changeCallback) {

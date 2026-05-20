@@ -144,28 +144,63 @@ pub fn run() {
             let focus_mode = MenuItemBuilder::with_id("focus_mode", "Focus Mode")
                 .accelerator("CmdOrCtrl+3")
                 .build(app)?;
+            let toggle_toolbar = MenuItemBuilder::with_id("toggle_toolbar", "Toggle Toolbar")
+                .accelerator("CmdOrCtrl+Shift+T")
+                .build(app)?;
+            let toggle_statusbar = MenuItemBuilder::with_id("toggle_statusbar", "Toggle Status Bar")
+                .accelerator("CmdOrCtrl+Shift+S")
+                .build(app)?;
+            let toggle_theme = MenuItemBuilder::with_id("toggle_theme", "Toggle Dark/Light Theme")
+                .accelerator("CmdOrCtrl+Shift+L")
+                .build(app)?;
 
             let view_menu = SubmenuBuilder::new(app, "View")
                 .item(&split_view)
                 .item(&preview_only)
                 .item(&focus_mode)
                 .separator()
-                .text("toggle_toolbar", "Toggle Toolbar")
-                .text("toggle_statusbar", "Toggle Status Bar")
-                .text("toggle_theme", "Toggle Dark/Light Theme")
+                .item(&toggle_toolbar)
+                .item(&toggle_statusbar)
+                .item(&toggle_theme)
                 .build()?;
 
+            let close_window = MenuItemBuilder::with_id("close_window", "Close Window")
+                .accelerator("CmdOrCtrl+W")
+                .build(app)?;
+            let open_file_menu = MenuItemBuilder::with_id("open", "Open…")
+                .accelerator("CmdOrCtrl+O")
+                .build(app)?;
+            let save_file_menu = MenuItemBuilder::with_id("save", "Save")
+                .accelerator("CmdOrCtrl+S")
+                .build(app)?;
+            let prefs_menu = MenuItemBuilder::with_id("preferences", "Preferences…")
+                .accelerator("CmdOrCtrl+,")
+                .build(app)?;
+
             let file_menu = SubmenuBuilder::new(app, "File")
-                .text("open", "Open…")
-                .text("save", "Save")
+                .item(&open_file_menu)
+                .item(&save_file_menu)
                 .separator()
-                .text("preferences", "Preferences…")
+                .item(&close_window)
+                .separator()
+                .item(&prefs_menu)
                 .separator()
                 .quit()
                 .build()?;
 
+            let edit_menu = SubmenuBuilder::new(app, "Edit")
+                .undo()
+                .redo()
+                .separator()
+                .cut()
+                .copy()
+                .paste()
+                .select_all()
+                .build()?;
+
             let menu = MenuBuilder::new(app)
                 .item(&file_menu)
+                .item(&edit_menu)
                 .item(&view_menu)
                 .build()?;
 
@@ -176,6 +211,10 @@ pub fn run() {
             app.on_menu_event(move |_app_handle, event| {
                 let id = event.id().0.as_str();
                 let js = match id {
+                    "close_window" => {
+                        let _ = w.destroy();
+                        return;
+                    }
                     "open" => "window.__medAction('open')",
                     "save" => "window.__medAction('save')",
                     "preferences" => "window.__medAction('preferences')",

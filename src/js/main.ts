@@ -147,7 +147,7 @@ function setupEdgeResize() {
 
 // Keyboard shortcuts for toolbar / statusbar / modes
 function setupKeyboardShortcuts() {
-  document.addEventListener("keydown", (e: KeyboardEvent) => {
+  window.addEventListener("keydown", (e: KeyboardEvent) => {
     const meta = e.metaKey || e.ctrlKey;
     if (!meta) return;
 
@@ -178,10 +178,11 @@ function setupKeyboardShortcuts() {
         break;
       case "w":
         e.preventDefault();
+        e.stopPropagation();
         getCurrentWindow().destroy();
         break;
     }
-  });
+  }, true);  // capture phase — fires before CodeMirror
 }
 
 function toggleToolbar() {
