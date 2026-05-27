@@ -317,6 +317,10 @@ pub fn run() {
                         flag.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
                     let settings = load_settings();
+                    let _ = std::fs::write("/tmp/med-tabs.log",
+                        format!("tabs_enabled={} win_count={}",
+                            settings.tabs_enabled,
+                            app_handle.webview_windows().len()));
                     for url in urls.iter() {
                         let decoded = urlencoding::decode(url.path())
                             .map(|s| s.into_owned())

@@ -14,7 +14,7 @@ import { tabManager } from "./tabs";
     case "split-view":   setMode("split");   break;
     case "preview-only": setMode("preview"); break;
     case "focus-mode":   setMode("editor");  break;
-    case "open":         openFile();         break;
+    case "open":         console.log("__medAction open called"); openFile();         break;
     case "save":         saveFile();         break;
     case "preferences":  showPreferences();  break;
     case "toggle-toolbar":  toggleToolbar();  break;
@@ -113,7 +113,18 @@ export async function saveFile(): Promise<boolean> {
 
 async function persistSettings() {
   try {
-    await invoke("update_settings", { settings: getSettings() });
+    const s = getSettings();
+    // Map camelCase (JS) → snake_case (Rust)
+    await invoke("update_settings", {
+      settings: {
+        theme: s.theme,
+        editor_font: s.editorFont,
+        editor_size: s.editorSize,
+        preview_font: s.previewFont,
+        preview_size: s.previewSize,
+        tabs_enabled: s.tabsEnabled,
+      },
+    });
   } catch (e) {
     console.error("Failed to save settings:", e);
   }

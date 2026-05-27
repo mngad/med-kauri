@@ -128,7 +128,18 @@ export function showPreferences() {
     const tabsOn = (document.getElementById("prefs-tabs") as HTMLInputElement).checked;
     document.dispatchEvent(new CustomEvent("tab-mode-changed", { detail: { enabled: tabsOn } }));
 
-    invoke("update_settings", { settings: getSettings() }).catch(() => {});
+    // Persist with proper snake_case mapping
+    const s = getSettings();
+    invoke("update_settings", {
+      settings: {
+        theme: s.theme,
+        editor_font: s.editorFont,
+        editor_size: s.editorSize,
+        preview_font: s.previewFont,
+        preview_size: s.previewSize,
+        tabs_enabled: s.tabsEnabled,
+      },
+    }).catch(() => {});
     overlay.remove();
   }
 }
