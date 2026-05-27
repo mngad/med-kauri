@@ -164,6 +164,13 @@ function setupKeyboardShortcuts() {
         e.preventDefault();
         setMode("split");
         break;
+      case "o":
+        e.preventDefault();
+        import("./bridge").then((m) => m.openFile());
+        break;
+        e.preventDefault();
+        setMode("split");
+        break;
       case "2":
         e.preventDefault();
         setMode("preview");

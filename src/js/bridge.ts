@@ -11,7 +11,14 @@ import { tabManager } from "./tabs";
 // ---- Globals called by Rust via eval() ----
 
 (window as any).__medAction = (action: string) => {
-  console.log("__medAction:", action);
+  const notify = (msg: string) => {
+    const el = document.createElement("div");
+    el.style.cssText = "position:fixed;bottom:20px;right:20px;background:#333;color:#fff;padding:8px 16px;border-radius:6px;font:12px monospace;z-index:99999";
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  };
+  notify(">>> " + action);
   switch (action) {
     case "split-view":   setMode("split");   break;
     case "preview-only": setMode("preview"); break;
