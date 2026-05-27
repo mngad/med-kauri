@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open, save, ask } from "@tauri-apps/plugin-dialog";
 import { setFilePath, setDirty, setMode, getIsDirty, getFilePath } from "./main";
 import { setEditorContent, getEditorContent, setEditorTheme } from "./editor";
 import { showPreferences, getSettings, setSettings, applySettings } from "./preferences";
@@ -10,6 +11,7 @@ import { tabManager } from "./tabs";
 // ---- Globals called by Rust via eval() ----
 
 (window as any).__medAction = (action: string) => {
+  console.log("__medAction:", action);
   switch (action) {
     case "split-view":   setMode("split");   break;
     case "preview-only": setMode("preview"); break;
@@ -58,7 +60,6 @@ export async function openFile() {
       const confirmed = await confirmDiscard();
       if (!confirmed) return;
     }
-    const { open } = await import("@tauri-apps/plugin-dialog");
     const path = await open({
       filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
       multiple: false,
@@ -77,7 +78,6 @@ export async function saveFile(): Promise<boolean> {
     saveCurrentTab();
     let path = getFilePath();
     if (!path) {
-      const { save } = await import("@tauri-apps/plugin-dialog");
       const selected = await save({
         filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
       });
@@ -114,7 +114,6 @@ async function persistSettings() {
 
 async function confirmDiscard(): Promise<boolean> {
   try {
-    const { ask } = await import("@tauri-apps/plugin-dialog");
     return await ask("You have unsaved changes. Discard them?", {
       title: "Unsaved Changes",
       kind: "warning",
@@ -145,12 +144,11 @@ function toggleTheme() {
 
 async function handleCloseRequested() {
   saveCurrentTab();
+  const active = tabManager.getActive();
 
   if (tabManager.tabs.length <= 1) {
-    const active = tabManager.getActive();
     if (active && active.isDirty) {
       try {
-        const { ask } = await import("@tauri-apps/plugin-dialog");
         const shouldSave = await ask("You have unsaved changes. Save before closing?", {
           title: "Unsaved Changes",
           kind: "warning",
@@ -167,10 +165,8 @@ async function handleCloseRequested() {
   }
 
   // Multiple tabs: close just the active tab
-  const active = tabManager.getActive();
   if (active && active.isDirty) {
     try {
-      const { ask } = await import("@tauri-apps/plugin-dialog");
       const shouldSave = await ask("You have unsaved changes. Save before closing?", {
         title: "Unsaved Changes",
         kind: "warning",

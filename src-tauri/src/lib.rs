@@ -264,10 +264,16 @@ pub fn run() {
                     _ => return,
                 };
                 // Try focused window first, fallback to main, then any window
-                let target = ah.get_focused_window()
+                let mut target = ah.get_focused_window()
                     .and_then(|w| ah.get_webview_window(w.label()))
                     .or_else(|| ah.get_webview_window("main"))
                     .or_else(|| ah.webview_windows().into_values().next());
+                // Fallback: try all windows
+                if target.is_none() {
+                    target = ah.webview_windows().into_values().next();
+                }
+                let _ = std::fs::write("/tmp/med-menu.log",
+                    format!("id={} target={}", id, target.is_some()));
                 if let Some(ww) = target {
                     let _ = ww.eval(js);
                 }
