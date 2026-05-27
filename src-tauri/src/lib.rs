@@ -2,6 +2,7 @@ use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::Manager;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 
 #[derive(Debug, Default)]
@@ -16,6 +17,7 @@ struct Settings {
     editor_size: u32,
     preview_font: String,
     preview_size: u32,
+    tabs_enabled: bool,
     window_x: Option<f64>,
     window_y: Option<f64>,
     window_w: Option<f64>,
@@ -30,6 +32,7 @@ impl Default for Settings {
             editor_size: 13,
             preview_font: "-apple-system, BlinkMacSystemFont, 'Segoe UI'".into(),
             preview_size: 16,
+            tabs_enabled: false,
             window_x: None,
             window_y: None,
             window_w: None,
@@ -115,6 +118,32 @@ fn get_startup_file(state: tauri::State<StartupFile>) -> Option<String> {
     state.path.lock().unwrap().clone()
 }
 
+fn create_file_window(
+    app: &tauri::AppHandle,
+    path: &str,
+) -> Result<tauri::WebviewWindow, tauri::Error> {
+    let p = std::path::PathBuf::from(path);
+    let content = std::fs::read_to_string(&p).unwrap_or_default();
+    let fname = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let content_json = serde_json::to_string(&content).unwrap_or_default();
+    let path_json = serde_json::to_string(&p.to_string_lossy()).unwrap_or_default();
+    let init_script = format!(
+        "window.__initialFile = {{ path: {}, content: {} }};",
+        path_json, content_json
+    );
+    let label = format!("file-{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis());
+    tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::App("index.html".into()))
+        .title(fname)
+        .inner_size(1200.0, 800.0)
+        .min_inner_size(400.0, 300.0)
+        .center()
+        .initialization_script(&init_script)
+        .build()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -129,12 +158,9 @@ pub fn run() {
             get_startup_file
         ])
         .manage(StartupFile::default())
+        .manage(std::sync::Arc::new(AtomicBool::new(false)))
         .setup(|app| {
-            let settings = load_settings();
-            let window = app.get_webview_window("main").unwrap();
-            let wev = window.clone();
-
-            // ---- Build menus ----
+            // ---- Build menus (no windows yet) ----
             let split_view = MenuItemBuilder::with_id("split_view", "Split View")
                 .accelerator("CmdOrCtrl+1")
                 .build(app)?;
@@ -206,15 +232,28 @@ pub fn run() {
 
             app.set_menu(menu)?;
 
-            // ---- Menu actions via eval (direct JS call, no events) ----
-            let w = wev.clone();
-            app.on_menu_event(move |_app_handle, event| {
+            // ---- Store CLI arg for later use (frontend will request it) ----
+            let args: Vec<String> = std::env::args().collect();
+            if args.len() > 1 {
+                let file_path = args[1].clone();
+                if std::fs::metadata(&file_path).is_ok() {
+                    let state = app.state::<StartupFile>();
+                    *state.path.lock().unwrap() = Some(file_path);
+                }
+            }
+
+            // ---- Menu actions ----
+            app.on_menu_event(move |ah, event| {
                 let id = event.id().0.as_str();
-                let js = match id {
-                    "close_window" => {
-                        let _ = w.destroy();
-                        return;
+                if id == "close_window" {
+                    if let Some(focused) = ah.get_focused_window() {
+                        if let Some(ww) = ah.get_webview_window(focused.label()) {
+                            let _ = ww.destroy();
+                        }
                     }
+                    return;
+                }
+                let js = match id {
                     "open" => "window.__medAction('open')",
                     "save" => "window.__medAction('save')",
                     "preferences" => "window.__medAction('preferences')",
@@ -226,49 +265,88 @@ pub fn run() {
                     "toggle_theme" => "window.__medAction('toggle-theme')",
                     _ => return,
                 };
-                let _ = w.eval(js);
-            });
-
-            // ---- Push settings to frontend via eval ----
-            if let Ok(settings_json) = serde_json::to_string(&settings) {
-                let js = format!(
-                    "window.__medSettings({});",
-                    settings_json
-                );
-                let _ = wev.eval(&js);
-            }
-
-            // ---- CLI file arg ----
-            let args: Vec<String> = std::env::args().collect();
-            if args.len() > 1 {
-                let file_path = args[1].clone();
-                if std::fs::metadata(&file_path).is_ok() {
-                    let state = app.state::<StartupFile>();
-                    *state.path.lock().unwrap() = Some(file_path);
-                }
-            }
-
-            // ---- Close event: save geometry, ask frontend to handle unsaved changes ----
-            let w_close = wev.clone();
-            wev.on_window_event(move |event| {
-                if let tauri::WindowEvent::CloseRequested { .. } = event {
-                    // Save window geometry
-                    if let Ok(pos) = w_close.outer_position() {
-                        let mut s = load_settings();
-                        s.window_x = Some(pos.x as f64);
-                        s.window_y = Some(pos.y as f64);
-                        if let Ok(size) = w_close.outer_size() {
-                            s.window_w = Some(size.width as f64);
-                            s.window_h = Some(size.height as f64);
-                        }
-                        let _ = save_settings(&s);
-                    }
-                    // Let the window close normally
+                // Try focused window first, fallback to main, then any window
+                let target = ah.get_focused_window()
+                    .and_then(|w| ah.get_webview_window(w.label()))
+                    .or_else(|| ah.get_webview_window("main"))
+                    .or_else(|| ah.webview_windows().into_values().next());
+                if let Some(ww) = target {
+                    let _ = ww.eval(js);
                 }
             });
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            match event {
+                tauri::RunEvent::Ready => {
+                    let has_startup = app_handle
+                        .state::<StartupFile>()
+                        .path.lock().unwrap()
+                        .is_some();
+                    let has_finder_file = app_handle
+                        .try_state::<std::sync::Arc<AtomicBool>>()
+                        .map(|f| f.load(std::sync::atomic::Ordering::Relaxed))
+                        .unwrap_or(false);
+                    if !has_startup && !has_finder_file {
+                        let _ = tauri::WebviewWindowBuilder::new(
+                            app_handle,
+                            "main",
+                            tauri::WebviewUrl::App("index.html".into()),
+                        )
+                        .title("med")
+                        .inner_size(1200.0, 800.0)
+                        .min_inner_size(400.0, 300.0)
+                        .center()
+                        .build();
+                    }
+                    // Push settings
+                    let settings = load_settings();
+                    if let Some(w) = app_handle.get_webview_window("main") {
+                        if let Ok(json) = serde_json::to_string(&settings) {
+                            let _ = w.eval(&format!("window.__medSettings({});", json));
+                        }
+                    }
+                }
+                tauri::RunEvent::Opened { urls } => {
+                    if let Some(flag) = app_handle
+                        .try_state::<std::sync::Arc<AtomicBool>>()
+                    {
+                        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    let settings = load_settings();
+                    for url in urls.iter() {
+                        let decoded = urlencoding::decode(url.path())
+                            .map(|s| s.into_owned())
+                            .unwrap_or_else(|_| url.path().to_string());
+                        let path = std::path::PathBuf::from(&decoded);
+                        if settings.tabs_enabled {
+                            // Send file to an existing window if any
+                            if let Ok(content) = std::fs::read_to_string(&path) {
+                                let content_json = serde_json::to_string(&content).unwrap_or_default();
+                                let path_json = serde_json::to_string(&path.to_string_lossy()).unwrap_or_default();
+                                let js = format!(
+                                    "window.__medOpenFile({}, {});",
+                                    path_json, content_json
+                                );
+                                // Try main, then any available window
+                                let target = app_handle
+                                    .get_webview_window("main")
+                                    .or_else(|| app_handle.webview_windows().into_values().next());
+                                if let Some(w) = target {
+                                    let _ = w.eval(&js);
+                                } else {
+                                    let _ = create_file_window(app_handle, &decoded);
+                                }
+                            }
+                        } else {
+                            let _ = create_file_window(app_handle, &decoded);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        });
 }

@@ -10,18 +10,7 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
-    "windows": [
-      {
-        "title": "med",
-        "width": 1200,
-        "height": 800,
-        "center": true,
-        "decorations": true,
-        "transparent": false,
-        "minWidth": 400,
-        "minHeight": 300
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }

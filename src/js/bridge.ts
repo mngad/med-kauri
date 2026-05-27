@@ -3,6 +3,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { setFilePath, setDirty, setMode, getIsDirty, getFilePath } from "./main";
 import { setEditorContent, getEditorContent, setEditorTheme } from "./editor";
 import { showPreferences, getSettings, setSettings, applySettings } from "./preferences";
+import { initTabs, isTabsEnabled, handleFileOpen, requestTabSwitch, enableTabs } from "./tab-bridge";
+import { initTabBar } from "./tab-bar";
+import { tabManager } from "./tabs";
 
 // ---- Globals called by Rust via eval() ----
 
@@ -23,15 +26,22 @@ import { showPreferences, getSettings, setSettings, applySettings } from "./pref
 (window as any).__medSettings = (json: any) => {
   const s = typeof json === "string" ? JSON.parse(json) : json;
   if (s) {
+    const tabsEnabled = s.tabs_enabled === true;
     setSettings({
       editorFont: s.editor_font,
       editorSize: s.editor_size,
       previewFont: s.preview_font,
       previewSize: s.preview_size,
+      tabsEnabled,
     });
     if (s.theme === "dark") {
       document.documentElement.classList.add("dark");
       setEditorTheme(true);
+    }
+
+    // Enable tabs if setting says so (called after settings load)
+    if (tabsEnabled) {
+      enableTabs();
     }
   }
   applySettings();
@@ -39,6 +49,16 @@ import { showPreferences, getSettings, setSettings, applySettings } from "./pref
 
 (window as any).__medClose = () => {
   handleCloseRequested();
+};
+
+(window as any).__medOpenFile = (path: string, content: string) => {
+  if (isTabsEnabled()) {
+    handleFileOpen(path, content);
+  } else {
+    setEditorContent(content);
+    setFilePath(path);
+    setDirty(false);
+  }
 };
 
 // ---- Actions ----
@@ -56,9 +76,13 @@ export async function openFile() {
     });
     if (path) {
       const content = await invoke<string>("open_file", { path });
-      setEditorContent(content);
-      setFilePath(path);
-      setDirty(false);
+      if (isTabsEnabled()) {
+        handleFileOpen(path, content);
+      } else {
+        setEditorContent(content);
+        setFilePath(path);
+        setDirty(false);
+      }
     }
   } catch (e) {
     console.error("Failed to open file:", e);
@@ -127,6 +151,28 @@ function toggleTheme() {
 }
 
 async function handleCloseRequested() {
+  // If tabs are enabled and there are multiple tabs, close just the active tab
+  if (isTabsEnabled() && tabManager.tabs.length > 0) {
+    const active = tabManager.getActive();
+    if (active && active.isDirty) {
+      try {
+        const { ask } = await import("@tauri-apps/plugin-dialog");
+        const shouldSave = await ask("You have unsaved changes. Save before closing?", {
+          title: "Unsaved Changes",
+          kind: "warning",
+        });
+        if (shouldSave) {
+          const saved = await saveFile();
+          if (!saved) return;
+        }
+      } catch {
+        // allow closing
+      }
+    }
+    await requestTabSwitch("close", tabManager.activeTabId!);
+    return;
+  }
+
   if (getIsDirty()) {
     try {
       const { ask } = await import("@tauri-apps/plugin-dialog");
@@ -149,13 +195,23 @@ async function handleCloseRequested() {
 // ---- Bootstrap ----
 
 export function setupBridge() {
+  // Init tab bar UI (hidden until tabs enabled)
+  initTabBar();
+
+  // Init tabs system
+  initTabs();
+
   // Request startup file from Rust (set via CLI arg)
   invoke<string | null>("get_startup_file", {}).then((filePath) => {
     if (filePath) {
       invoke<string>("open_file", { path: filePath }).then((content) => {
-        setEditorContent(content);
-        setFilePath(filePath);
-        setDirty(false);
+        if (isTabsEnabled()) {
+          handleFileOpen(filePath, content);
+        } else {
+          setEditorContent(content);
+          setFilePath(filePath);
+          setDirty(false);
+        }
       });
     }
   });

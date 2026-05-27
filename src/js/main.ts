@@ -1,8 +1,9 @@
-import { initEditor, getEditorContent, onEditorChange } from "./editor";
+import { initEditor, getEditorContent, onEditorChange, setEditorContent } from "./editor";
 import { updatePreview } from "./preview";
 import { setupToolbar } from "./toolbar";
 import { setupBridge } from "./bridge";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { isTabsEnabled, handleFileOpen, requestTabSwitch } from "./tab-bridge";
 
 // State
 let currentFilePath: string | null = null;
@@ -22,7 +23,7 @@ export function setFilePath(path: string | null) {
   updateTitle();
 }
 
-function updateTitle() {
+export function updateTitle() {
   const filename = currentFilePath
     ? currentFilePath.split("/").pop() || currentFilePath
     : "Untitled";
@@ -156,6 +157,9 @@ function setupKeyboardShortcuts() {
         if (e.shiftKey) {
           e.preventDefault();
           toggleToolbar();
+        } else if (isTabsEnabled()) {
+          e.preventDefault();
+          requestTabSwitch("new");
         }
         break;
       case "s":
@@ -179,7 +183,23 @@ function setupKeyboardShortcuts() {
       case "w":
         e.preventDefault();
         e.stopPropagation();
-        getCurrentWindow().destroy();
+        if (isTabsEnabled()) {
+          (window as any).__medClose();
+        } else {
+          getCurrentWindow().destroy();
+        }
+        break;
+      case "[":
+        if (isTabsEnabled()) {
+          e.preventDefault();
+          requestTabSwitch("prev");
+        }
+        break;
+      case "]":
+        if (isTabsEnabled()) {
+          e.preventDefault();
+          requestTabSwitch("next");
+        }
         break;
     }
   }, true);  // capture phase — fires before CodeMirror
@@ -207,6 +227,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Apply default mode (preview-only)
   setMode(currentMode);
+
+  // Check for file loaded via initialization script (new window from Finder)
+  const initFile = (window as any).__initialFile;
+  if (initFile && initFile.content) {
+    if (isTabsEnabled()) {
+      handleFileOpen(initFile.path, initFile.content);
+    } else {
+      setEditorContent(initFile.content);
+      if (initFile.path) setFilePath(initFile.path);
+      setDirty(false);
+    }
+  }
 
   onEditorChange(() => {
     setDirty(true);
