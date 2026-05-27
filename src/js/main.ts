@@ -2,8 +2,7 @@ import { initEditor, getEditorContent, onEditorChange, setEditorContent } from "
 import { updatePreview } from "./preview";
 import { setupToolbar } from "./toolbar";
 import { setupBridge } from "./bridge";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { isTabsEnabled, handleFileOpen, requestTabSwitch } from "./tab-bridge";
+import { requestTabSwitch } from "./tab-bridge";
 
 // State
 let currentFilePath: string | null = null;
@@ -31,18 +30,15 @@ export function updateTitle() {
   document.title = `${dirty}${filename} — med`;
 }
 
-// Debounced preview update
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 function debouncedUpdatePreview() {
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
-    const content = getEditorContent();
-    updatePreview(content);
+    updatePreview(getEditorContent());
     updateStatusBar();
   }, 150);
 }
 
-// Sync scroll
 let syncing = false;
 function setupSyncScroll() {
   const previewEl = document.getElementById("preview-pane");
@@ -85,7 +81,6 @@ export function setMode(mode: "split" | "preview" | "editor") {
   app.classList.add(`mode-${mode === "preview" ? "preview-only" : mode === "editor" ? "editor-only" : "split"}`);
 }
 
-// Divider drag to resize panes
 function setupDividerDrag() {
   const divider = document.getElementById("divider")!;
   const mainContent = document.getElementById("main-content")!;
@@ -117,7 +112,6 @@ function setupDividerDrag() {
   });
 }
 
-// Status bar word/char count
 function updateStatusBar() {
   const content = getEditorContent();
   const words = content.trim() ? content.trim().split(/\s+/).length : 0;
@@ -126,7 +120,6 @@ function updateStatusBar() {
   document.getElementById("status-chars")!.textContent = `${chars} chars`;
 }
 
-// Window edge resize
 function setupEdgeResize() {
   const edgeSize = 4;
   document.addEventListener("mousemove", (e) => {
@@ -146,7 +139,6 @@ function setupEdgeResize() {
   });
 }
 
-// Keyboard shortcuts for toolbar / statusbar / modes
 function setupKeyboardShortcuts() {
   window.addEventListener("keydown", (e: KeyboardEvent) => {
     const meta = e.metaKey || e.ctrlKey;
@@ -157,7 +149,7 @@ function setupKeyboardShortcuts() {
         if (e.shiftKey) {
           e.preventDefault();
           toggleToolbar();
-        } else if (isTabsEnabled()) {
+        } else {
           e.preventDefault();
           requestTabSwitch("new");
         }
@@ -183,26 +175,18 @@ function setupKeyboardShortcuts() {
       case "w":
         e.preventDefault();
         e.stopPropagation();
-        if (isTabsEnabled()) {
-          (window as any).__medClose();
-        } else {
-          getCurrentWindow().destroy();
-        }
+        (window as any).__medClose();
         break;
       case "[":
-        if (isTabsEnabled()) {
-          e.preventDefault();
-          requestTabSwitch("prev");
-        }
+        e.preventDefault();
+        requestTabSwitch("prev");
         break;
       case "]":
-        if (isTabsEnabled()) {
-          e.preventDefault();
-          requestTabSwitch("next");
-        }
+        e.preventDefault();
+        requestTabSwitch("next");
         break;
     }
-  }, true);  // capture phase — fires before CodeMirror
+  }, true);
 }
 
 function toggleToolbar() {
@@ -225,19 +209,18 @@ document.addEventListener("DOMContentLoaded", () => {
   setupEdgeResize();
   setupKeyboardShortcuts();
 
-  // Apply default mode (preview-only)
   setMode(currentMode);
 
-  // Check for file loaded via initialization script (new window from Finder)
+  // Check for file loaded via initialization script
   const initFile = (window as any).__initialFile;
   if (initFile && initFile.content) {
-    if (isTabsEnabled()) {
-      handleFileOpen(initFile.path, initFile.content);
-    } else {
-      setEditorContent(initFile.content);
-      if (initFile.path) setFilePath(initFile.path);
-      setDirty(false);
-    }
+    setEditorContent(initFile.content);
+    if (initFile.path) setFilePath(initFile.path);
+    setDirty(false);
+    // Defer tab init until after content is set
+    setTimeout(ensureTabsInit, 50);
+  } else {
+    ensureTabsInit();
   }
 
   onEditorChange(() => {
@@ -245,8 +228,11 @@ document.addEventListener("DOMContentLoaded", () => {
     debouncedUpdatePreview();
   });
 
-  // Initial preview
   updatePreview(getEditorContent());
   updateStatusBar();
   setDirty(false);
 });
+
+function ensureTabsInit() {
+  import("./tab-bridge").then((m) => m.ensureTabsInited());
+}

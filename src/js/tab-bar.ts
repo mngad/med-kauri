@@ -1,18 +1,11 @@
 // Tab bar UI rendering and event handling
 import { tabManager } from "./tabs";
 
-// Dispatch custom events instead of importing from tab-bridge (avoids circular dep)
+let tabBarEl: HTMLElement | null = null;
+
 function emitTabAction(action: "switch" | "close" | "new" | "prev" | "next", tabId?: string) {
   const detail = tabId ? { action, tabId } : { action };
   document.dispatchEvent(new CustomEvent("tab-action", { detail }));
-}
-
-let tabBarEl: HTMLElement | null = null;
-let tabBarVisible = false;
-
-export function setTabBarVisible(visible: boolean) {
-  tabBarVisible = visible;
-  render();
 }
 
 export function initTabBar() {
@@ -26,10 +19,6 @@ export function initTabBar() {
     }
   }
 
-  // Listen for tab changes
-  tabManager.onChange(() => render());
-
-  // Add "new tab" button
   tabBarEl.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
     const closeBtn = target.closest(".tab-close");
@@ -54,17 +43,16 @@ export function initTabBar() {
       emitTabAction("new");
     }
   });
-
-  render();
 }
 
-function render() {
+export function renderTabBar() {
   if (!tabBarEl) return;
 
   const tabs = tabManager.tabs;
   const activeId = tabManager.activeTabId;
 
-  if (!tabBarVisible || tabs.length === 0) {
+  // Hide if only 1 tab (or 0)
+  if (tabs.length <= 1) {
     tabBarEl.style.display = "none";
     return;
   }

@@ -17,7 +17,6 @@ struct Settings {
     editor_size: u32,
     preview_font: String,
     preview_size: u32,
-    tabs_enabled: bool,
     window_x: Option<f64>,
     window_y: Option<f64>,
     window_w: Option<f64>,
@@ -32,7 +31,6 @@ impl Default for Settings {
             editor_size: 13,
             preview_font: "-apple-system, BlinkMacSystemFont, 'Segoe UI'".into(),
             preview_size: 16,
-            tabs_enabled: false,
             window_x: None,
             window_y: None,
             window_w: None,
@@ -316,37 +314,27 @@ pub fn run() {
                     {
                         flag.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
-                    let settings = load_settings();
-                    let _ = std::fs::write("/tmp/med-tabs.log",
-                        format!("tabs_enabled={} win_count={}",
-                            settings.tabs_enabled,
-                            app_handle.webview_windows().len()));
                     for url in urls.iter() {
                         let decoded = urlencoding::decode(url.path())
                             .map(|s| s.into_owned())
                             .unwrap_or_else(|_| url.path().to_string());
                         let path = std::path::PathBuf::from(&decoded);
-                        if settings.tabs_enabled {
-                            // Send file to an existing window if any
-                            if let Ok(content) = std::fs::read_to_string(&path) {
-                                let content_json = serde_json::to_string(&content).unwrap_or_default();
-                                let path_json = serde_json::to_string(&path.to_string_lossy()).unwrap_or_default();
-                                let js = format!(
-                                    "window.__medOpenFile({}, {});",
-                                    path_json, content_json
-                                );
-                                // Try main, then any available window
-                                let target = app_handle
-                                    .get_webview_window("main")
-                                    .or_else(|| app_handle.webview_windows().into_values().next());
-                                if let Some(w) = target {
-                                    let _ = w.eval(&js);
-                                } else {
-                                    let _ = create_file_window(app_handle, &decoded);
-                                }
+                        // Always add as tab if any window exists
+                        if let Ok(content) = std::fs::read_to_string(&path) {
+                            let content_json = serde_json::to_string(&content).unwrap_or_default();
+                            let path_json = serde_json::to_string(&path.to_string_lossy()).unwrap_or_default();
+                            let js = format!(
+                                "window.__medOpenFile({}, {});",
+                                path_json, content_json
+                            );
+                            let target = app_handle
+                                .get_webview_window("main")
+                                .or_else(|| app_handle.webview_windows().into_values().next());
+                            if let Some(w) = target {
+                                let _ = w.eval(&js);
+                            } else {
+                                let _ = create_file_window(app_handle, &decoded);
                             }
-                        } else {
-                            let _ = create_file_window(app_handle, &decoded);
                         }
                     }
                 }

@@ -8,7 +8,6 @@ const settings = {
   editorSize: 13,
   previewFont: "-apple-system, BlinkMacSystemFont, 'Segoe UI'",
   previewSize: 16,
-  tabsEnabled: false,
 };
 
 const FONT_OPTIONS = [
@@ -39,7 +38,6 @@ export function setSettings(s: Partial<typeof settings>) {
 }
 
 export function applySettings() {
-  // Apply editor font
   const editorView = getEditor();
   const cmContent = editorView.dom.querySelector(".cm-content") as HTMLElement;
   if (cmContent) {
@@ -47,15 +45,12 @@ export function applySettings() {
     cmContent.style.fontSize = `${settings.editorSize}px`;
   }
 
-  // Apply preview font
   const preview = document.getElementById("preview")!;
   preview.style.fontFamily = settings.previewFont;
   preview.style.fontSize = `${settings.previewSize}px`;
 }
 
-// Show preferences modal
 export function showPreferences() {
-  // Remove existing modal if any
   document.getElementById("prefs-overlay")?.remove();
 
   const overlay = document.createElement("div");
@@ -69,10 +64,6 @@ export function showPreferences() {
           <option value="light" ${settings.theme === "light" ? "selected" : ""}>Light</option>
           <option value="dark" ${settings.theme === "dark" ? "selected" : ""}>Dark</option>
         </select>
-        <label class="prefs-checkbox">
-          <input type="checkbox" id="prefs-tabs" ${settings.tabsEnabled ? "checked" : ""}>
-          Enable Tabs
-        </label>
       </div>
       <div class="prefs-section">
         <h3>Editor Font</h3>
@@ -96,7 +87,6 @@ export function showPreferences() {
 
   document.body.appendChild(overlay);
 
-  // Bind events
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) close();
   });
@@ -107,7 +97,6 @@ export function showPreferences() {
     const newTheme = (document.getElementById("prefs-theme") as HTMLSelectElement).value;
     const isDark = newTheme === "dark";
 
-    // Apply theme
     if (isDark) {
       document.documentElement.classList.add("dark");
     } else {
@@ -121,14 +110,8 @@ export function showPreferences() {
       editorSize: parseInt((document.getElementById("prefs-editor-size") as HTMLInputElement).value, 10),
       previewFont: (document.getElementById("prefs-preview-font") as HTMLSelectElement).value,
       previewSize: parseInt((document.getElementById("prefs-preview-size") as HTMLInputElement).value, 10),
-      tabsEnabled: (document.getElementById("prefs-tabs") as HTMLInputElement).checked,
     });
 
-    // Notify tab system of change
-    const tabsOn = (document.getElementById("prefs-tabs") as HTMLInputElement).checked;
-    document.dispatchEvent(new CustomEvent("tab-mode-changed", { detail: { enabled: tabsOn } }));
-
-    // Persist with proper snake_case mapping
     const s = getSettings();
     invoke("update_settings", {
       settings: {
@@ -137,14 +120,13 @@ export function showPreferences() {
         editor_size: s.editorSize,
         preview_font: s.previewFont,
         preview_size: s.previewSize,
-        tabs_enabled: s.tabsEnabled,
       },
     }).catch(() => {});
+
     overlay.remove();
   }
 }
 
-// Apply settings on load
 document.addEventListener("DOMContentLoaded", () => {
   setTimeout(applySettings, 100);
 });
