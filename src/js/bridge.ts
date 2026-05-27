@@ -1,12 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open, save, ask } from "@tauri-apps/plugin-dialog";
 import { setFilePath, setDirty, setMode, getIsDirty, getFilePath } from "./main";
 import { setEditorContent, getEditorContent, setEditorTheme } from "./editor";
 import { showPreferences, getSettings, setSettings, applySettings } from "./preferences";
 import { ensureTabsInited, handleFileOpen, saveCurrentTab, requestTabSwitch } from "./tab-bridge";
 import { initTabBar } from "./tab-bar";
 import { tabManager } from "./tabs";
+
+// Lazy-load dialog plugin (must be after Tauri runtime is ready)
+async function getDialog() {
+  return await import("@tauri-apps/plugin-dialog");
+}
 
 // ---- Globals called by Rust via eval() ----
 
@@ -23,7 +27,11 @@ import { tabManager } from "./tabs";
     case "split-view":   setMode("split");   break;
     case "preview-only": setMode("preview"); break;
     case "focus-mode":   setMode("editor");  break;
-    case "open":         openFile();         break;
+    case "open":
+      openFile().catch((e: any) => {
+        alert("Open failed: " + (e?.message || e));
+      });
+      break;
     case "save":         saveFile();         break;
     case "preferences":  showPreferences();  break;
     case "toggle-toolbar":  toggleToolbar();  break;
@@ -67,6 +75,7 @@ export async function openFile() {
       const confirmed = await confirmDiscard();
       if (!confirmed) return;
     }
+    const { open } = await getDialog();
     const path = await open({
       filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
       multiple: false,
@@ -75,8 +84,8 @@ export async function openFile() {
       const content = await invoke<string>("open_file", { path });
       handleFileOpen(path, content);
     }
-  } catch (e) {
-    console.error("Failed to open file:", e);
+  } catch (e: any) {
+    alert("Open failed: " + (e?.message || String(e)));
   }
 }
 
@@ -85,6 +94,7 @@ export async function saveFile(): Promise<boolean> {
     saveCurrentTab();
     let path = getFilePath();
     if (!path) {
+      const { save } = await getDialog();
       const selected = await save({
         filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
       });
@@ -121,6 +131,7 @@ async function persistSettings() {
 
 async function confirmDiscard(): Promise<boolean> {
   try {
+    const { ask } = await getDialog();
     return await ask("You have unsaved changes. Discard them?", {
       title: "Unsaved Changes",
       kind: "warning",
@@ -156,6 +167,7 @@ async function handleCloseRequested() {
   if (tabManager.tabs.length <= 1) {
     if (active && active.isDirty) {
       try {
+        const { ask } = await getDialog();
         const shouldSave = await ask("You have unsaved changes. Save before closing?", {
           title: "Unsaved Changes",
           kind: "warning",
@@ -174,6 +186,7 @@ async function handleCloseRequested() {
   // Multiple tabs: close just the active tab
   if (active && active.isDirty) {
     try {
+      const { ask } = await getDialog();
       const shouldSave = await ask("You have unsaved changes. Save before closing?", {
         title: "Unsaved Changes",
         kind: "warning",
