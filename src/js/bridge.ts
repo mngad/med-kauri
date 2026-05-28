@@ -15,19 +15,27 @@ async function getDialog() {
 // ---- Globals called by Rust via eval() ----
 
 (window as any).__medAction = (action: string) => {
-  const notify = (msg: string) => {
-    const el = document.createElement("div");
-    el.style.cssText = "position:fixed;bottom:20px;right:20px;background:#333;color:#fff;padding:8px 16px;border-radius:6px;font:12px monospace;z-index:99999";
-    el.textContent = msg;
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 3000);
+  const show = (msg: string) => {
+    let el = document.getElementById("debug-overlay");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "debug-overlay";
+      el.style.cssText = "position:fixed;top:10px;right:10px;background:rgba(0,0,0,0.9);color:#0f0;padding:12px;border-radius:6px;font:11px monospace;z-index:99999;max-width:400px;white-space:pre-wrap";
+      document.body.appendChild(el);
+    }
+    el.textContent += msg + "\n";
   };
-  notify(">>> " + action);
+  show(">>> " + action);
   switch (action) {
     case "split-view":   setMode("split");   break;
     case "preview-only": setMode("preview"); break;
     case "focus-mode":   setMode("editor");  break;
-    case "open":         openFile().catch((e: any) => alert("PROMISE ERROR: " + e));         break;
+    case "open":
+      openFile().catch((e: any) => {
+        const el = document.getElementById("debug-overlay");
+        if (el) el.textContent += "PROMISE ERROR: " + e + "\n";
+      });
+      break;
     case "save":         saveFile();         break;
     case "preferences":  showPreferences();  break;
     case "toggle-toolbar":  toggleToolbar();  break;
@@ -65,38 +73,39 @@ async function getDialog() {
 // ---- Actions ----
 
 export async function openFile() {
-  // STEP 1: verify function entry
-  alert("STEP1: openFile entered");
+  const log = (msg: string) => {
+    const el = document.getElementById("debug-overlay");
+    if (el) el.textContent += msg + "\n";
+  };
+  log("STEP1: openFile() entered");
 
   try {
     saveCurrentTab();
-    
-    // STEP 2: check dirty state
     const dirty = getIsDirty();
-    alert("STEP2: dirty=" + dirty);
+    log("STEP2: dirty=" + dirty);
     if (dirty) {
       const confirmed = await confirmDiscard();
-      if (!confirmed) return;
+      if (!confirmed) { log("STEP2b: user cancelled"); return; }
     }
 
-    // STEP 3: import dialog plugin
-    alert("STEP3: importing dialog...");
+    log("STEP3: importing dialog...");
     const dialog = await getDialog();
-    alert("STEP4: dialog imported, type=" + typeof dialog.open);
+    log("STEP4: dialog.type=" + typeof dialog.open);
 
-    // STEP 5: call open
-    alert("STEP5: calling dialog.open...");
+    log("STEP5: calling dialog.open()...");
     const path = await dialog.open({
       filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
       multiple: false,
     });
-    alert("STEP6: path=" + path);
+    log("STEP6: path=" + JSON.stringify(path));
     if (path) {
+      log("STEP7: loading file...");
       const content = await invoke<string>("open_file", { path });
+      log("STEP8: loaded " + content.length + " chars");
       handleFileOpen(path, content);
     }
   } catch (e: any) {
-    alert("ERROR: " + (e?.message || String(e)));
+    log("ERROR: " + (e?.message || String(e)));
   }
 }
 
