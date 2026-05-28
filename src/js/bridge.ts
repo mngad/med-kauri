@@ -27,11 +27,7 @@ async function getDialog() {
     case "split-view":   setMode("split");   break;
     case "preview-only": setMode("preview"); break;
     case "focus-mode":   setMode("editor");  break;
-    case "open":
-      openFile().catch((e: any) => {
-        alert("Open failed: " + (e?.message || e));
-      });
-      break;
+    case "open":         openFile().catch((e: any) => alert("PROMISE ERROR: " + e));         break;
     case "save":         saveFile();         break;
     case "preferences":  showPreferences();  break;
     case "toggle-toolbar":  toggleToolbar();  break;
@@ -69,23 +65,38 @@ async function getDialog() {
 // ---- Actions ----
 
 export async function openFile() {
+  // STEP 1: verify function entry
+  alert("STEP1: openFile entered");
+
   try {
     saveCurrentTab();
-    if (getIsDirty()) {
+    
+    // STEP 2: check dirty state
+    const dirty = getIsDirty();
+    alert("STEP2: dirty=" + dirty);
+    if (dirty) {
       const confirmed = await confirmDiscard();
       if (!confirmed) return;
     }
-    const { open } = await getDialog();
-    const path = await open({
+
+    // STEP 3: import dialog plugin
+    alert("STEP3: importing dialog...");
+    const dialog = await getDialog();
+    alert("STEP4: dialog imported, type=" + typeof dialog.open);
+
+    // STEP 5: call open
+    alert("STEP5: calling dialog.open...");
+    const path = await dialog.open({
       filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
       multiple: false,
     });
+    alert("STEP6: path=" + path);
     if (path) {
       const content = await invoke<string>("open_file", { path });
       handleFileOpen(path, content);
     }
   } catch (e: any) {
-    alert("Open failed: " + (e?.message || String(e)));
+    alert("ERROR: " + (e?.message || String(e)));
   }
 }
 
