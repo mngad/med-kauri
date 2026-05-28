@@ -8,6 +8,7 @@ const settings = {
   editorSize: 13,
   previewFont: "-apple-system, BlinkMacSystemFont, 'Segoe UI'",
   previewSize: 16,
+  debugMode: false,
 };
 
 const FONT_OPTIONS = [
@@ -79,6 +80,13 @@ export function showPreferences() {
         </select>
         <label>Size: <input type="number" id="prefs-preview-size" value="${settings.previewSize}" min="12" max="28"></label>
       </div>
+      <div class="prefs-section">
+        <h3>Developer</h3>
+        <label class="prefs-checkbox">
+          <input type="checkbox" id="prefs-debug" ${settings.debugMode ? "checked" : ""}>
+          Show Debug Overlay
+        </label>
+      </div>
       <div class="prefs-actions">
         <button id="prefs-close">Close</button>
       </div>
@@ -110,6 +118,7 @@ export function showPreferences() {
       editorSize: parseInt((document.getElementById("prefs-editor-size") as HTMLInputElement).value, 10),
       previewFont: (document.getElementById("prefs-preview-font") as HTMLSelectElement).value,
       previewSize: parseInt((document.getElementById("prefs-preview-size") as HTMLInputElement).value, 10),
+      debugMode: (document.getElementById("prefs-debug") as HTMLInputElement).checked,
     });
 
     const s = getSettings();
@@ -120,6 +129,7 @@ export function showPreferences() {
         editor_size: s.editorSize,
         preview_font: s.previewFont,
         preview_size: s.previewSize,
+        debug_mode: s.debugMode,
       },
     }).catch(() => {});
 

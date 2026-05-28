@@ -12,29 +12,36 @@ async function getDialog() {
   return await import("@tauri-apps/plugin-dialog");
 }
 
+// ---- Debug overlay (only when enabled in preferences) ----
+let debugEnabled = false;
+
+function debugLog(msg: string) {
+  if (!debugEnabled) return;
+  let el = document.getElementById("debug-overlay");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "debug-overlay";
+    el.style.cssText = "position:fixed;top:10px;right:10px;background:rgba(0,0,0,0.9);color:#0f0;padding:12px;border-radius:6px;font:11px monospace;z-index:99999;max-width:400px;white-space:pre-wrap";
+    document.body.appendChild(el);
+  }
+  el.textContent += msg + "\n";
+}
+
+function clearDebug() {
+  const el = document.getElementById("debug-overlay");
+  if (el) el.remove();
+}
+
 // ---- Globals called by Rust via eval() ----
 
 (window as any).__medAction = (action: string) => {
-  const show = (msg: string) => {
-    let el = document.getElementById("debug-overlay");
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "debug-overlay";
-      el.style.cssText = "position:fixed;top:10px;right:10px;background:rgba(0,0,0,0.9);color:#0f0;padding:12px;border-radius:6px;font:11px monospace;z-index:99999;max-width:400px;white-space:pre-wrap";
-      document.body.appendChild(el);
-    }
-    el.textContent += msg + "\n";
-  };
-  show(">>> " + action);
+  debugLog(">>> " + action);
   switch (action) {
     case "split-view":   setMode("split");   break;
     case "preview-only": setMode("preview"); break;
     case "focus-mode":   setMode("editor");  break;
     case "open":
-      openFile().catch((e: any) => {
-        const el = document.getElementById("debug-overlay");
-        if (el) el.textContent += "PROMISE ERROR: " + e + "\n";
-      });
+      openFile().catch((e: any) => debugLog("PROMISE ERROR: " + e));
       break;
     case "save":         saveFile();         break;
     case "preferences":  showPreferences();  break;
@@ -53,7 +60,10 @@ async function getDialog() {
       editorSize: s.editor_size,
       previewFont: s.preview_font,
       previewSize: s.preview_size,
+      debugMode: s.debug_mode || false,
     });
+    debugEnabled = s.debug_mode === true;
+    if (!debugEnabled) clearDebug();
     if (s.theme === "dark") {
       document.documentElement.classList.add("dark");
       setEditorTheme(true);
@@ -73,39 +83,23 @@ async function getDialog() {
 // ---- Actions ----
 
 export async function openFile() {
-  const log = (msg: string) => {
-    const el = document.getElementById("debug-overlay");
-    if (el) el.textContent += msg + "\n";
-  };
-  log("STEP1: openFile() entered");
-
   try {
     saveCurrentTab();
-    const dirty = getIsDirty();
-    log("STEP2: dirty=" + dirty);
-    if (dirty) {
+    if (getIsDirty()) {
       const confirmed = await confirmDiscard();
-      if (!confirmed) { log("STEP2b: user cancelled"); return; }
+      if (!confirmed) return;
     }
-
-    log("STEP3: importing dialog...");
-    const dialog = await getDialog();
-    log("STEP4: dialog.type=" + typeof dialog.open);
-
-    log("STEP5: calling dialog.open()...");
-    const path = await dialog.open({
+    const { open } = await getDialog();
+    const path = await open({
       filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
       multiple: false,
     });
-    log("STEP6: path=" + JSON.stringify(path));
     if (path) {
-      log("STEP7: loading file...");
       const content = await invoke<string>("open_file", { path });
-      log("STEP8: loaded " + content.length + " chars");
       handleFileOpen(path, content);
     }
   } catch (e: any) {
-    log("ERROR: " + (e?.message || String(e)));
+    debugLog("ERROR (openFile): " + (e?.message || String(e)));
   }
 }
 
@@ -142,6 +136,7 @@ async function persistSettings() {
         editor_size: s.editorSize,
         preview_font: s.previewFont,
         preview_size: s.previewSize,
+        debug_mode: s.debugMode,
       },
     });
   } catch (e) {
